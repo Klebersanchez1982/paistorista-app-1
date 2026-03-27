@@ -12,11 +12,12 @@
     <h2 class="mb-3">🚗 Paistorista</h2>
     <p>Organize caronas escolares com segurança</p>
     <p class="mb-3">Escolha como deseja entrar:</p>
+    <div id="login-status" class="alert alert-info d-none" role="alert"></div>
     <div class="d-flex justify-content-center gap-3">
-      <button class="btn btn-primary" onclick="login('motorista')">
+      <button id="btn-motorista" class="btn btn-primary" onclick="login('motorista')">
         <i class="material-icons align-middle me-1">drive_eta</i> Entrar como Motorista
       </button>
-      <button class="btn btn-secondary" onclick="login('passageiro')">
+      <button id="btn-passageiro" class="btn btn-secondary" onclick="login('passageiro')">
         <i class="material-icons align-middle me-1">group</i> Entrar como Passageiro
       </button>
     </div>
@@ -28,28 +29,127 @@
   <script src="firebase-config.js" defer></script>
 
   <script defer>
-    function login(tipo) {
-      const provider = new firebase.auth.GoogleAuthProvider();
-      firebase.auth().signInWithPopup(provider)
-        .then(result => {
-          const user = result.user;
-          const db = firebase.firestore();
-          db.collection("usuarios").doc(user.uid).set({
-            nome: user.displayName,
-            email: user.email,
-            tipo: tipo
-          }, { merge: true })
-          .then(() => {
-            window.location.href = "index.html";  // Redireciona para index.html
-          })
-          .catch(error => {
-            alert("⚠️ Erro ao salvar dados: " + error.message);
-          });
-        })
-        .catch(error => {
-          alert("⚠️ Erro ao autenticar: " + error.message);
-        });
+    const USER_TYPE_STORAGE_KEY = "tipo_usuario_escolhido";
+
+    function toggleLoginButtons(disabled) {
+      const b1 = document.getElementById("btn-motorista");
+      const b2 = document.getElementById("btn-passageiro");
+      if (b1) b1.disabled = disabled;
+      if (b2) b2.disabled = disabled;
     }
+
+    function showStatus(message, variant = "info") {
+      const box = document.getElementById("login-status");
+      if (!box) return;
+      box.className = `alert alert-${variant}`;
+      box.classList.remove("d-none");
+      box.textContent = message;
+    }
+
+    function firebaseErrorMessage(error) {
+      const code = error?.code || "desconhecido";
+      const map = {
+        "auth/unauthorized-domain": "Domínio não autorizado no Firebase. Adicione este domínio em Authentication > Settings > Authorized domains.",
+        "auth/popup-blocked": "O navegador bloqueou a janela de login. Permita pop-ups e tente novamente.",
+        "auth/popup-closed-by-user": "A janela de login foi fechada antes da conclusão.",
+        "auth/network-request-failed": "Falha de rede ao autenticar. Verifique sua conexão e tente novamente.",
+        "auth/operation-not-supported-in-this-environment": "Ambiente inválido para login popup. Use http://localhost ou https:// (não use file://)."
+      };
+      const reason = map[code] || (error?.message || "Erro desconhecido");
+      return `${reason}\n\nCódigo: ${code}`;
+    }
+
+    async function persistUserProfile(user, tipo) {
+      const db = firebase.firestore();
+      await db.collection("usuarios").doc(user.uid).set({
+        nome: user.displayName,
+        email: user.email,
+        tipo: tipo
+      }, { merge: true });
+    }
+
+    async function finalizeLogin(user, tipo) {
+      try {
+        await persistUserProfile(user, tipo);
+      } catch (profileError) {
+        console.error("Erro ao salvar perfil no Firestore:", profileError);
+      }
+
+      localStorage.setItem(USER_TYPE_STORAGE_KEY, tipo);
+      window.location.href = "index.html";
+    }
+
+    async function handleRedirectResultIfAny() {
+      try {
+        const result = await firebase.auth().getRedirectResult();
+        const user = result?.user || firebase.auth().currentUser;
+        if (!user) return;
+
+        const tipo = sessionStorage.getItem(USER_TYPE_STORAGE_KEY) || localStorage.getItem(USER_TYPE_STORAGE_KEY);
+        if (!tipo) {
+          showStatus("Login concluído, mas o tipo de usuário não foi encontrado. Escolha novamente.", "warning");
+          await firebase.auth().signOut();
+          toggleLoginButtons(false);
+          return;
+        }
+
+        showStatus("Login concluído. Redirecionando...", "success");
+        await finalizeLogin(user, tipo);
+      } catch (error) {
+        showStatus("Falha no retorno do login: " + firebaseErrorMessage(error), "danger");
+        toggleLoginButtons(false);
+      }
+    }
+
+    async function login(tipo) {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      sessionStorage.setItem(USER_TYPE_STORAGE_KEY, tipo);
+      localStorage.setItem(USER_TYPE_STORAGE_KEY, tipo);
+      toggleLoginButtons(true);
+      showStatus("Abrindo autenticação do Google...", "info");
+
+      try {
+        const result = await firebase.auth().signInWithPopup(provider);
+        const user = result.user;
+        await finalizeLogin(user, tipo);
+      } catch (error) {
+        // Fallback para ambientes que bloqueiam popup.
+        if (error?.code === "auth/popup-blocked" || error?.code === "auth/operation-not-supported-in-this-environment") {
+          try {
+            showStatus("Popup indisponível. Redirecionando para o login...", "warning");
+            await firebase.auth().signInWithRedirect(provider);
+            return;
+          } catch (redirectError) {
+            alert("⚠️ Falha no login por redirecionamento.\n\n" + firebaseErrorMessage(redirectError));
+            toggleLoginButtons(false);
+            return;
+          }
+        }
+
+        alert("⚠️ Erro ao autenticar.\n\n" + firebaseErrorMessage(error));
+        toggleLoginButtons(false);
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      toggleLoginButtons(true);
+      showStatus("Preparando autenticação...", "info");
+
+      await handleRedirectResultIfAny();
+
+      firebase.auth().onAuthStateChanged(user => {
+        if (user) {
+          const tipo = localStorage.getItem(USER_TYPE_STORAGE_KEY) || sessionStorage.getItem(USER_TYPE_STORAGE_KEY);
+          if (tipo === "motorista" || tipo === "passageiro") {
+            window.location.href = "index.html";
+            return;
+          }
+        }
+
+        showStatus("Escolha o tipo de acesso para entrar.", "info");
+        toggleLoginButtons(false);
+      });
+    });
   </script>
 </body>
 </html>

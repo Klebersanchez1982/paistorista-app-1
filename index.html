@@ -11,11 +11,27 @@
   <script src="firebase-config.js"></script>
 
   <script defer>
+    const USER_TYPE_STORAGE_KEY = "tipo_usuario_escolhido";
+
+    function redirectByType(tipo) {
+      if (tipo === "motorista") {
+        window.location.href = "app.html";
+      } else if (tipo === "passageiro") {
+        window.location.href = "passageiro.html";
+      } else {
+        throw new Error("Tipo de usuário inválido.");
+      }
+    }
+
     firebase.auth().onAuthStateChanged(async user => {
       if (!user) {
         window.location.href = "login.html";
         return;
       }
+
+      const localType = localStorage.getItem(USER_TYPE_STORAGE_KEY);
+      const sessionType = sessionStorage.getItem(USER_TYPE_STORAGE_KEY);
+      const fallbackTipo = localType || sessionType;
 
       try {
         const db = firebase.firestore();
@@ -23,21 +39,37 @@
 
         if (doc.exists) {
           const tipo = doc.data().tipo;
-          if (tipo === "motorista") {
-            window.location.href = "app.html";
-          } else if (tipo === "passageiro") {
-            window.location.href = "passageiro.html";
-          } else {
-            throw new Error("Tipo de usuário inválido.");
-          }
+          localStorage.setItem(USER_TYPE_STORAGE_KEY, tipo);
+          redirectByType(tipo);
         } else {
-          // Se doc não existe, pode ser race condition; espere um pouco e tente de novo
-          setTimeout(() => window.location.reload(), 1000);  // Retry após 1s
+          if (fallbackTipo) {
+            // Tenta persistir perfil para não depender apenas do fallback.
+            try {
+              await db.collection("usuarios").doc(user.uid).set({
+                nome: user.displayName,
+                email: user.email,
+                tipo: fallbackTipo
+              }, { merge: true });
+            } catch (persistError) {
+              console.error("Falha ao persistir perfil em fallback:", persistError);
+            }
+
+            redirectByType(fallbackTipo);
+          } else {
+            // Se doc não existe e não há fallback, pode ser race condition; tente novamente.
+            setTimeout(() => window.location.reload(), 1000);
+          }
         }
       } catch (error) {
         console.error("Erro ao carregar tipo:", error);
-        alert("⚠️ Erro ao carregar perfil. Tente novamente.");
-        firebase.auth().signOut();
+
+        if (fallbackTipo) {
+          redirectByType(fallbackTipo);
+          return;
+        }
+
+        alert("⚠️ Erro ao carregar perfil. Faça login novamente.\n\nCódigo: " + (error?.code || "desconhecido"));
+        await firebase.auth().signOut();
         window.location.href = "login.html";
       }
     });
