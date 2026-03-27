@@ -3,6 +3,7 @@
 // Importações do Firebase
 const auth = firebase.auth();
 const db = firebase.firestore();
+let refreshTimerStarted = false;
 
 // Função de logout (comum)
 export async function logoutUser() {
@@ -25,34 +26,66 @@ function showLoading(show) {
   }
 }
 
+function waitForGoogleMaps(timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    if (window.google && window.google.maps) {
+      resolve();
+      return;
+    }
+
+    const startedAt = Date.now();
+    const intervalId = setInterval(() => {
+      if (window.google && window.google.maps) {
+        clearInterval(intervalId);
+        resolve();
+        return;
+      }
+
+      if (Date.now() - startedAt >= timeoutMs) {
+        clearInterval(intervalId);
+        reject(new Error('Google Maps não carregou no tempo esperado.'));
+      }
+    }, 200);
+  });
+}
+
 // Tempo limite para resposta (5 minutos em ms)
 const REQUEST_TIMEOUT = 5 * 60 * 1000;
 
 // Lógica geral: Espera auth state em todas as páginas protegidas
 document.addEventListener('DOMContentLoaded', () => {
   showLoading(true);  // Mostra loading inicialmente
-  M.AutoInit();  // Inicializa Materialize
+  if (window.M && typeof M.AutoInit === 'function') {
+    M.AutoInit();  // Inicializa Materialize
+  }
 
   auth.onAuthStateChanged(async user => {
-    if (!user) {
-      showLoading(false);
-      window.location.href = 'login.html';
-      return;
+    try {
+      if (!user) {
+        window.location.href = 'login.html';
+        return;
+      }
+
+      // Usuário logado: Carrega dados específicos da página
+      if (window.location.pathname.endsWith('passageiro.html')) {
+        await loadPassengerPage(user);
+      } else if (window.location.pathname.endsWith('app.html')) {
+        await loadDriverPage(user);
+      }
+
+      // Atualiza a página periodicamente (evita múltiplos timers)
+      if (!refreshTimerStarted) {
+        refreshTimerStarted = true;
+        setInterval(() => {
+          location.reload();
+        }, 500000);
+      }
+    } catch (error) {
+      console.error('Erro ao inicializar página:', error);
+      alert('⚠️ Erro ao carregar a tela. Recarregue a página.\n\nDetalhe: ' + (error?.message || error));
+    } finally {
+      showLoading(false);  // Esconde loading mesmo em caso de erro
     }
-
-    // Usuário logado: Carrega dados específicos da página
-    if (window.location.pathname.endsWith('passageiro.html')) {
-      await loadPassengerPage(user);
-    } else if (window.location.pathname.endsWith('app.html')) {
-      await loadDriverPage(user);
-    }
-
-    showLoading(false);  // Esconde loading após carregar
-
-    // Atualiza a página a cada 5 segundos (para ambas as telas)
-    setInterval(() => {
-      location.reload();
-    }, 500000);
   });
 });
 
@@ -178,22 +211,24 @@ async function loadPassengerPage(user) {
 async function loadDriverPage(user) {
   let map, directionsService, directionsRenderer, geocoder, currentMarker;
 
-  // Inicializa o mapa (callback do Google Maps)
-  window.initMap = function() {
-    map = new google.maps.Map(document.getElementById('map'), {
-      zoom: 12,
-      center: { lat: -23.5505, lng: -46.6333 } // Centro padrão (São Paulo)
-    });
-    directionsService = new google.maps.DirectionsService();
-    directionsRenderer = new google.maps.DirectionsRenderer();
-    directionsRenderer.setMap(map);
-    geocoder = new google.maps.Geocoder(); // Inicializa o Geocoder
-  };
+  await waitForGoogleMaps();
 
-  if (typeof window.initMap === 'function') window.initMap();
+  const mapElement = document.getElementById('map');
+  if (!mapElement) {
+    throw new Error('Elemento do mapa não encontrado.');
+  }
+
+  map = new google.maps.Map(mapElement, {
+    zoom: 12,
+    center: { lat: -23.5505, lng: -46.6333 } // Centro padrão (São Paulo)
+  });
+  directionsService = new google.maps.DirectionsService();
+  directionsRenderer = new google.maps.DirectionsRenderer();
+  directionsRenderer.setMap(map);
+  geocoder = new google.maps.Geocoder(); // Inicializa o Geocoder
 
   // Botão para usar localização atual como origem
-  document.getElementById('btn-location').addEventListener('click', () => {
+  document.getElementById('btn-location')?.addEventListener('click', () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(position => {
         const { latitude, longitude } = position.coords;
@@ -237,7 +272,7 @@ async function loadDriverPage(user) {
   });
 
   // Botão para traçar rota
-  document.getElementById('btn-route').addEventListener('click', () => {
+  document.getElementById('btn-route')?.addEventListener('click', () => {
     const origin = document.getElementById('origin').value;
     const destination = document.getElementById('destination').value;
     if (!origin || !destination) {
@@ -259,7 +294,7 @@ async function loadDriverPage(user) {
   });
 
   // Botão para salvar carona
-  document.getElementById('btn-save').addEventListener('click', async () => {
+  document.getElementById('btn-save')?.addEventListener('click', async () => {
     const school = document.getElementById('school').value;
     const seats = parseInt(document.getElementById('seats').value);
     const origin = document.getElementById('origin').value;
