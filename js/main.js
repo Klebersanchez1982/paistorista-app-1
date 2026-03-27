@@ -1,9 +1,12 @@
 // js/main.js
 
+import { getEnvironmentName, getMapsApiKey } from './app-config.js';
+
 // Importações do Firebase
 const auth = firebase.auth();
 const db = firebase.firestore();
 let refreshTimerStarted = false;
+let mapsScriptPromise = null;
 
 // Função de logout (comum)
 export async function logoutUser() {
@@ -47,6 +50,36 @@ function waitForGoogleMaps(timeoutMs = 15000) {
       }
     }, 200);
   });
+}
+
+function loadGoogleMapsScript(apiKey) {
+  if (window.google && window.google.maps) {
+    return Promise.resolve();
+  }
+
+  if (mapsScriptPromise) {
+    return mapsScriptPromise;
+  }
+
+  mapsScriptPromise = new Promise((resolve, reject) => {
+    const existingScript = document.querySelector('script[data-google-maps="dynamic"]');
+    if (existingScript) {
+      existingScript.addEventListener('load', () => resolve(), { once: true });
+      existingScript.addEventListener('error', () => reject(new Error('Falha ao carregar Google Maps.')), { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.setAttribute('data-google-maps', 'dynamic');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Falha ao carregar Google Maps.'));
+    document.head.appendChild(script);
+  });
+
+  return mapsScriptPromise;
 }
 
 // Tempo limite para resposta (5 minutos em ms)
@@ -210,6 +243,15 @@ async function loadPassengerPage(user) {
 // Função para carregar página de motorista
 async function loadDriverPage(user) {
   let map, directionsService, directionsRenderer, geocoder, currentMarker;
+
+  const env = getEnvironmentName();
+  const mapsApiKey = getMapsApiKey();
+
+  if (!mapsApiKey) {
+    throw new Error(`Google Maps sem chave configurada para o host ${window.location.hostname} (ambiente: ${env}).`);
+  }
+
+  await loadGoogleMapsScript(mapsApiKey);
 
   await waitForGoogleMaps();
 
