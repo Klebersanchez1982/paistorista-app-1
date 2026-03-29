@@ -8,17 +8,12 @@
   <!-- Materialize CSS -->
   <link href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
-
-  <style>
-    .brand-logo { font-size: 1.6rem; }
-    .logout-btn { margin-left: auto; }
-    .status-label { font-weight: bold; }
-  </style>
+  <link href="style.css" rel="stylesheet"/>
 </head>
-<body class="grey lighten-4">
+<body class="page-passenger grey lighten-4">
 
   <!-- Loading Spinner -->
-  <div id="loading" class="center-align" style="margin-top: 20px;">
+  <div id="loading" class="center-align loading-overlay">
     <div class="preloader-wrapper big active">
       <div class="spinner-layer spinner-blue-only">
         <div class="circle-clipper left"><div class="circle"></div></div>
@@ -30,7 +25,7 @@
   </div>
 
   <!-- Navbar -->
-  <nav class="blue darken-2">
+  <nav class="blue darken-2 app-nav">
     <div class="nav-wrapper container">
       <a class="brand-logo"><i class="material-icons left">group</i> Paistorista - Passageiro</a>
       <ul class="right">
@@ -43,24 +38,49 @@
     </div>
   </nav>
 
-  <main class="container section" style="display: none;">
+  <main class="container section app-shell passenger-shell" style="display: none;">
+    <section class="hero-strip hero-passenger">
+      <div>
+        <p class="hero-kicker">PAINEL DO PASSAGEIRO</p>
+        <h4>Escolha a melhor carona em segundos</h4>
+        <p class="hero-text">Veja escolas, compare opções disponíveis e acompanhe o status da sua solicitação.</p>
+      </div>
+      <div class="hero-metrics">
+        <div class="metric-card"><span class="material-icons">school</span><small>Escolas</small><strong>Filtradas</strong></div>
+        <div class="metric-card"><span class="material-icons">notifications_active</span><small>Atualizações</small><strong>Instantâneas</strong></div>
+      </div>
+    </section>
+
     <!-- Escolas cadastradas -->
-    <h5 class="blue-text text-darken-2">🏫 Escolas com caronas</h5>
-    <ul id="school-list" class="collection with-header">
-      <li class="collection-header"><h6>Lista de Escolas</h6></li>
-    </ul>
+    <section id="passenger-schools" class="panel-card panel-schools">
+      <h5 class="blue-text text-darken-2 section-title">🏫 Escolas com caronas</h5>
+      <ul id="school-list" class="collection with-header smooth-collection">
+        <li class="collection-header"><h6>Lista de Escolas</h6></li>
+      </ul>
+    </section>
 
     <!-- Caronas disponíveis -->
-    <h5 class="blue-text text-darken-2">🚗 Caronas disponíveis</h5>
-    <ul id="rides-list" class="collection with-header">
-      <li class="collection-header"><h6>Selecione uma escola para ver caronas</h6></li>
-    </ul>
+    <section id="passenger-rides" class="panel-card panel-rides-available">
+      <h5 class="blue-text text-darken-2 section-title">🚗 Caronas disponíveis</h5>
+      <ul id="rides-list" class="collection with-header smooth-collection">
+        <li class="collection-header"><h6>Selecione uma escola para ver caronas</h6></li>
+      </ul>
+    </section>
 
     <!-- Minhas solicitações -->
-    <h5 class="blue-text text-darken-2">📋 Minhas solicitações</h5>
-    <ul id="my-requests" class="collection with-header">
-      <li class="collection-header"><h6>Solicitações realizadas</h6></li>
-    </ul>
+    <section id="passenger-requests" class="panel-card panel-my-requests">
+      <h5 class="blue-text text-darken-2 section-title">📋 Minhas solicitações</h5>
+      <ul id="my-requests" class="collection with-header smooth-collection">
+        <li class="collection-header"><h6>Solicitações realizadas</h6></li>
+      </ul>
+    </section>
+
+    <nav class="quick-dock" aria-label="Acoes rapidas do passageiro">
+      <a href="#passenger-schools" class="quick-dock-item"><i class="material-icons">school</i><span>Escolas</span></a>
+      <a href="#passenger-rides" class="quick-dock-item"><i class="material-icons">local_taxi</i><span>Caronas</span></a>
+      <a href="#passenger-requests" class="quick-dock-item"><i class="material-icons">receipt_long</i><span>Status</span></a>
+      <a href="#" class="quick-dock-item" onclick="window.scrollTo({ top: 0, behavior: 'smooth' }); return false;"><i class="material-icons">north</i><span>Topo</span></a>
+    </nav>
   </main>
 
   <!-- Firebase SDKs -->

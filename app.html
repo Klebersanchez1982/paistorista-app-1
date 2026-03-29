@@ -6,15 +6,12 @@
   <title>Paistorista - Motorista</title>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css" rel="stylesheet"/>
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
-  <style>
-    #map { height: 500px; width: 100%; }
-    .btn-logout { margin-left: auto; }
-  </style>
+  <link href="style.css" rel="stylesheet"/>
 </head>
-<body class="grey lighten-4">
+<body class="page-driver grey lighten-4">
 
   <!-- Loading Spinner -->
-  <div id="loading" class="center-align" style="margin-top: 20px;">
+  <div id="loading" class="center-align loading-overlay">
     <div class="preloader-wrapper big active">
       <div class="spinner-layer spinner-blue-only">
         <div class="circle-clipper left"><div class="circle"></div></div>
@@ -25,7 +22,7 @@
     <p>Carregando...</p>
   </div>
 
-  <nav class="blue darken-2">
+  <nav class="blue darken-2 app-nav">
     <div class="nav-wrapper container">
       <a href="#!" class="brand-logo"><i class="material-icons left">directions_car</i> Paistorista</a>
       <ul class="right">
@@ -34,36 +31,61 @@
     </div>
   </nav>
 
-  <main class="container section" style="display: none;">
-    <h5 class="blue-text text-darken-2">Criar Nova Carona</h5>
-    <div class="row">
-      <div class="input-field col s12 m6"><input id="school" type="text"><label for="school">Nome da Escola</label></div>
-      <div class="input-field col s12 m6"><input id="seats" type="number"><label for="seats">Vagas disponíveis</label></div>
-    </div>
-    <div class="row">
-      <div class="input-field col s12 m6"><input id="origin" type="text"><label for="origin">Endereço de origem</label></div>
-      <div class="input-field col s12 m6"><input id="destination" type="text"><label for="destination">Endereço de destino</label></div>
-    </div>
-    <div class="row">
-      <div class="input-field col s12 m6"><input id="time" type="time"><label for="time">Horário da carona</label></div>
-    </div>
-    <div class="row">
-      <button id="btn-location" class="btn teal">Usar localização atual</button>
-      <button id="btn-route" class="btn blue">Traçar rota</button>
-      <button id="btn-save" class="btn green">Salvar carona</button>
-    </div>
-    <div class="card"><div id="map"></div></div>
+  <main class="container section app-shell driver-shell" style="display: none;">
+    <section class="hero-strip hero-driver">
+      <div>
+        <p class="hero-kicker">PAINEL DO MOTORISTA</p>
+        <h4>Controle suas rotas como um cockpit</h4>
+        <p class="hero-text">Cadastre caronas, acompanhe solicitações e mantenha o trajeto organizado para cada escola.</p>
+      </div>
+      <div class="hero-metrics">
+        <div class="metric-card"><span class="material-icons">timeline</span><small>Operação</small><strong>Ao vivo</strong></div>
+        <div class="metric-card"><span class="material-icons">verified_user</span><small>Status</small><strong>Seguro</strong></div>
+      </div>
+    </section>
 
-    <!-- Seção para Minhas Caronas e Solicitações -->
-    <h5 class="blue-text text-darken-2">Minhas Caronas</h5>
-    <ul id="my-rides" class="collection with-header">
-      <li class="collection-header"><h6>Suas caronas cadastradas</h6></li>
-    </ul>
+    <section id="driver-create" class="panel-card panel-create">
+      <h5 class="blue-text text-darken-2 section-title">Criar Nova Carona</h5>
+      <div class="row">
+        <div class="input-field col s12 m6"><input id="school" type="text"><label for="school">Nome da Escola</label></div>
+        <div class="input-field col s12 m6"><input id="seats" type="number"><label for="seats">Vagas disponíveis</label></div>
+      </div>
+      <div class="row">
+        <div class="input-field col s12 m6"><input id="origin" type="text"><label for="origin">Endereço de origem</label></div>
+        <div class="input-field col s12 m6"><input id="destination" type="text"><label for="destination">Endereço de destino</label></div>
+      </div>
+      <div class="row">
+        <div class="input-field col s12 m6"><input id="time" type="time"><label for="time">Horário da carona</label></div>
+      </div>
+      <div class="row actions-row">
+        <button id="btn-location" class="btn teal waves-effect">Usar localização atual</button>
+        <button id="btn-route" class="btn blue waves-effect">Traçar rota</button>
+        <button id="btn-save" class="btn green waves-effect">Salvar carona</button>
+      </div>
+    </section>
 
-    <h5 class="blue-text text-darken-2">Solicitações Pendentes</h5>
-    <ul id="pending-requests" class="collection with-header">
-      <li class="collection-header"><h6>Solicitações para suas caronas</h6></li>
-    </ul>
+    <section id="driver-map" class="card map-card panel-map"><div id="map"></div></section>
+
+    <section id="driver-rides" class="panel-card panel-rides">
+      <h5 class="blue-text text-darken-2 section-title">Minhas Caronas</h5>
+      <ul id="my-rides" class="collection with-header smooth-collection">
+        <li class="collection-header"><h6>Suas caronas cadastradas</h6></li>
+      </ul>
+    </section>
+
+    <section id="driver-requests" class="panel-card panel-requests">
+      <h5 class="blue-text text-darken-2 section-title">Solicitações Pendentes</h5>
+      <ul id="pending-requests" class="collection with-header smooth-collection">
+        <li class="collection-header"><h6>Solicitações para suas caronas</h6></li>
+      </ul>
+    </section>
+
+    <nav class="quick-dock" aria-label="Acoes rapidas do motorista">
+      <a href="#driver-create" class="quick-dock-item"><i class="material-icons">add_road</i><span>Nova</span></a>
+      <a href="#driver-map" class="quick-dock-item"><i class="material-icons">map</i><span>Mapa</span></a>
+      <a href="#driver-rides" class="quick-dock-item"><i class="material-icons">route</i><span>Caronas</span></a>
+      <a href="#driver-requests" class="quick-dock-item"><i class="material-icons">fact_check</i><span>Pedidos</span></a>
+    </nav>
   </main>
 
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
