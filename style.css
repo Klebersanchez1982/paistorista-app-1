@@ -488,3 +488,53 @@ body {
     grid-column: 1 / -1;
   }
 }
+
+.footer-version {
+margin-top: auto;
+padding: 14px 16px 18px;
+text-align: center;
+font-size: 0.85rem;
+line-height: 1.4;
+color: #64748b;
+}
+
+.footer-version strong {
+color: #14213d;
+font-weight: 800;
+}
+
+body.page-redirect {
+min-height: 100vh;
+display: flex;
+flex-direction: column;
+}
+
+.redirect-main {
+flex: 1 0 auto;
+display: grid;
+place-items: center;
+padding: 24px 16px;
+text-align: center;
+}
+
+body.page-login,
+body.page-driver,
+body.page-passenger {
+min-height: 100vh;
+display: flex;
+flex-direction: column;
+}
+
+.login-main {
+flex: 1 0 auto;
+display: flex;
+align-items: center;
+justify-content: center;
+padding: 16px;
+}
+
+body.page-login main,
+body.page-driver main,
+body.page-passenger main {
+flex: 1 0 auto;
+}
