@@ -82,6 +82,42 @@ function loadGoogleMapsScript(apiKey) {
   return mapsScriptPromise;
 }
 
+function mostFrequent(values) {
+  const counts = new Map();
+  values.forEach((value) => {
+    const normalized = String(value || '').trim();
+    if (!normalized) return;
+    counts.set(normalized, (counts.get(normalized) || 0) + 1);
+  });
+
+  let bestValue = '';
+  let bestCount = 0;
+  counts.forEach((count, value) => {
+    if (count > bestCount) {
+      bestValue = value;
+      bestCount = count;
+    }
+  });
+
+  return bestValue;
+}
+
+function fillDatalist(datalist, values) {
+  if (!datalist) return;
+  datalist.innerHTML = '';
+
+  values
+    .filter(Boolean)
+    .map((value) => String(value).trim())
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+    .forEach((value) => {
+      const option = document.createElement('option');
+      option.value = value;
+      datalist.appendChild(option);
+    });
+}
+
 // Tempo limite para resposta (5 minutos em ms)
 const REQUEST_TIMEOUT = 5 * 60 * 1000;
 
@@ -125,30 +161,83 @@ document.addEventListener('DOMContentLoaded', () => {
 // Função para carregar página de passageiro
 async function loadPassengerPage(user) {
   const schoolList = document.getElementById('school-list');
+  const schoolSearchInput = document.getElementById('school-search');
   const ridesList = document.getElementById('rides-list');
   const myRequests = document.getElementById('my-requests');
+  let availableSchools = [];
+  let selectedSchoolName = '';
+
+  function selectSchool(schoolName) {
+    selectedSchoolName = schoolName;
+    loadRidesForSchool(schoolName);
+    renderSchoolList(schoolSearchInput?.value || '');
+  }
+
+  function renderSchoolList(filterValue = '') {
+    const filter = String(filterValue || '').trim().toLowerCase();
+
+    schoolList.innerHTML = '<li class="collection-header"><h6>Lista de Escolas</h6></li>';
+
+    const filteredSchools = availableSchools.filter((schoolName) =>
+      schoolName.toLowerCase().includes(filter)
+    );
+
+    if (!filteredSchools.length) {
+      const empty = document.createElement('li');
+      empty.classList.add('collection-item');
+      empty.textContent = 'Nenhuma escola encontrada para este filtro.';
+      schoolList.appendChild(empty);
+      return;
+    }
+
+    filteredSchools.forEach(schoolName => {
+      const li = document.createElement('li');
+      li.classList.add('collection-item');
+      if (selectedSchoolName === schoolName) {
+        li.classList.add('school-selected');
+      }
+      li.innerHTML = `
+        <button type="button" class="school-select-btn" data-school-name="${schoolName.replace(/"/g, '&quot;')}">
+          <span>${schoolName}</span>
+          <span class="secondary-content"><i class="material-icons" aria-hidden="true">school</i></span>
+        </button>
+      `;
+      li.querySelector('.school-select-btn')?.addEventListener('click', () => selectSchool(schoolName));
+      schoolList.appendChild(li);
+    });
+  }
 
   // Listener em tempo real para caronas, para extrair escolas únicas
   db.collection('caronas').onSnapshot(snapshot => {
     const schools = new Set(); // Usar Set para nomes únicos de escolas
     snapshot.forEach(doc => {
       const ride = doc.data();
-      if (ride.escola && ride.vagas > 0) {
+      const vagasDisponiveis = Number(ride.vagas ?? ride.vagasDisponiveis ?? 0);
+      if (ride.escola && vagasDisponiveis > 0 && ride.status !== 'inativa') {
         schools.add(ride.escola); // Adiciona nome da escola se houver vagas
       }
     });
 
-    // Limpa e popula lista de escolas
-    schoolList.innerHTML = '<li class="collection-header"><h6>Lista de Escolas</h6></li>';
-    schools.forEach(schoolName => {
-      const li = document.createElement('li');
-      li.classList.add('collection-item');
-      li.innerHTML = `
-        <div>${schoolName} <span class="secondary-content"><i class="material-icons">school</i></span></div>
-      `;
-      li.addEventListener('click', () => loadRidesForSchool(schoolName));
-      schoolList.appendChild(li);
-    });
+    availableSchools = Array.from(schools).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    renderSchoolList(schoolSearchInput?.value || '');
+  });
+
+  schoolSearchInput?.addEventListener('input', () => {
+    renderSchoolList(schoolSearchInput.value);
+  });
+
+  schoolSearchInput?.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+
+    const filter = String(schoolSearchInput.value || '').trim().toLowerCase();
+    const firstMatch = availableSchools.find((schoolName) =>
+      schoolName.toLowerCase().includes(filter)
+    );
+
+    if (firstMatch) {
+      event.preventDefault();
+      selectSchool(firstMatch);
+    }
   });
 
   let unsubscribeRides; // Para cancelar listener anterior de caronas
@@ -166,6 +255,14 @@ async function loadPassengerPage(user) {
         // Limpa itens existentes (exceto header)
         while (ridesList.children.length > 1) {
           ridesList.removeChild(ridesList.lastChild);
+        }
+
+        if (snapshot.empty) {
+          const empty = document.createElement('li');
+          empty.classList.add('collection-item');
+          empty.textContent = 'Nao ha caronas disponiveis para esta escola no momento.';
+          ridesList.appendChild(empty);
+          return;
         }
 
         snapshot.forEach(doc => {
@@ -242,7 +339,16 @@ async function loadPassengerPage(user) {
 
 // Função para carregar página de motorista
 async function loadDriverPage(user) {
-  let map, directionsService, directionsRenderer, geocoder, currentMarker;
+  let map, directionsService, directionsRenderer, geocoder, currentMarker, destinationMarker;
+  const schoolProfiles = new Map();
+
+  const schoolInput = document.getElementById('school');
+  const destinationInput = document.getElementById('destination');
+  const originInput = document.getElementById('origin');
+  const timeInput = document.getElementById('time');
+  const schoolInfo = document.getElementById('school-info');
+  const schoolDatalist = document.getElementById('school-suggestions');
+  const destinationDatalist = document.getElementById('destination-suggestions');
 
   const env = getEnvironmentName();
   const mapsApiKey = getMapsApiKey();
@@ -269,6 +375,172 @@ async function loadDriverPage(user) {
   directionsRenderer.setMap(map);
   geocoder = new google.maps.Geocoder(); // Inicializa o Geocoder
 
+  function setSchoolInfo(message) {
+    if (!schoolInfo) return;
+    schoolInfo.textContent = message;
+  }
+
+  function findSchoolProfile(name) {
+    const key = String(name || '').trim().toLowerCase();
+    if (!key) return null;
+    return schoolProfiles.get(key) || null;
+  }
+
+  function updateSchoolSuggestions() {
+    const schools = [];
+    const destinations = [];
+
+    schoolProfiles.forEach((profile) => {
+      if (profile?.name) schools.push(profile.name);
+      if (profile?.topDestination) destinations.push(profile.topDestination);
+    });
+
+    fillDatalist(schoolDatalist, schools);
+    fillDatalist(destinationDatalist, destinations);
+  }
+
+  db.collection('caronas')
+    .where('status', '==', 'ativa')
+    .onSnapshot((snapshot) => {
+      schoolProfiles.clear();
+
+      snapshot.forEach((doc) => {
+        const ride = doc.data();
+        const schoolName = String(ride.escola || '').trim();
+        if (!schoolName) return;
+
+        const key = schoolName.toLowerCase();
+        const profile = schoolProfiles.get(key) || {
+          name: schoolName,
+          destinations: [],
+          horarios: [],
+          total: 0
+        };
+
+        profile.total += 1;
+        if (ride.destino) profile.destinations.push(ride.destino);
+        if (ride.horario) profile.horarios.push(ride.horario);
+        schoolProfiles.set(key, profile);
+      });
+
+      schoolProfiles.forEach((profile, key) => {
+        schoolProfiles.set(key, {
+          ...profile,
+          topDestination: mostFrequent(profile.destinations),
+          topHorario: mostFrequent(profile.horarios)
+        });
+      });
+
+      updateSchoolSuggestions();
+    });
+
+  if (schoolInput) {
+    schoolInput.addEventListener('input', () => {
+      const schoolName = schoolInput.value;
+      const profile = findSchoolProfile(schoolName);
+
+      if (!profile) {
+        setSchoolInfo('Digite o nome da escola para receber sugestoes automaticas. Voce tambem pode clicar no mapa para definir o destino.');
+        return;
+      }
+
+      if (destinationInput && !destinationInput.value && profile.topDestination) {
+        destinationInput.value = profile.topDestination;
+      }
+
+      if (timeInput && !timeInput.value && profile.topHorario) {
+        timeInput.value = profile.topHorario;
+      }
+
+      M.updateTextFields();
+
+      const hintParts = [`Base encontrada para ${profile.name}`];
+      if (profile.topDestination) hintParts.push(`destino sugerido: ${profile.topDestination}`);
+      if (profile.topHorario) hintParts.push(`horario sugerido: ${profile.topHorario}`);
+      setSchoolInfo(hintParts.join(' | '));
+    });
+  }
+
+  if (google.maps.places && schoolInput) {
+    const schoolAutocomplete = new google.maps.places.Autocomplete(schoolInput, {
+      fields: ['name', 'formatted_address', 'geometry', 'types']
+    });
+
+    schoolAutocomplete.addListener('place_changed', () => {
+      const place = schoolAutocomplete.getPlace();
+      if (!place) return;
+
+      const isSchool = Array.isArray(place.types) && place.types.includes('school');
+      if (place.name) schoolInput.value = place.name;
+
+      if (destinationInput && !destinationInput.value && place.formatted_address) {
+        destinationInput.value = place.formatted_address;
+      }
+
+      if (place.geometry?.location) {
+        map.setCenter(place.geometry.location);
+        map.setZoom(15);
+      }
+
+      M.updateTextFields();
+      setSchoolInfo(isSchool
+        ? `Escola encontrada no mapa: ${place.name || 'nome nao informado'}.`
+        : 'Local selecionado. Confira se corresponde a escola desejada.');
+    });
+  }
+
+  if (google.maps.places && destinationInput) {
+    const destinationAutocomplete = new google.maps.places.Autocomplete(destinationInput, {
+      fields: ['formatted_address', 'geometry']
+    });
+
+    destinationAutocomplete.addListener('place_changed', () => {
+      const place = destinationAutocomplete.getPlace();
+      if (!place?.geometry?.location) return;
+
+      map.setCenter(place.geometry.location);
+      map.setZoom(15);
+
+      if (destinationMarker) {
+        destinationMarker.setMap(null);
+      }
+
+      destinationMarker = new google.maps.Marker({
+        position: place.geometry.location,
+        map,
+        title: 'Destino selecionado'
+      });
+    });
+  }
+
+  map.addListener('click', (event) => {
+    const clickedLatLng = event.latLng;
+
+    geocoder.geocode({ location: clickedLatLng }, (results, status) => {
+      if (status !== 'OK' || !results?.[0]) {
+        setSchoolInfo('Nao foi possivel converter o ponto clicado em endereco. Tente novamente.');
+        return;
+      }
+
+      if (destinationInput) {
+        destinationInput.value = results[0].formatted_address;
+        M.updateTextFields();
+      }
+
+      if (destinationMarker) {
+        destinationMarker.setMap(null);
+      }
+
+      destinationMarker = new google.maps.Marker({
+        position: clickedLatLng,
+        map,
+        title: 'Destino selecionado no mapa'
+      });
+
+      setSchoolInfo('Destino definido pelo mapa. Endereco preenchido automaticamente.');
+    });
+  });
+
   // Botão para usar localização atual como origem
   document.getElementById('btn-location')?.addEventListener('click', () => {
     if (navigator.geolocation) {
@@ -280,7 +552,9 @@ async function loadDriverPage(user) {
         geocoder.geocode({ location: latlng }, (results, status) => {
           if (status === 'OK') {
             if (results[0]) {
-              document.getElementById('origin').value = results[0].formatted_address;
+              if (originInput) {
+                originInput.value = results[0].formatted_address;
+              }
               M.updateTextFields(); // Atualiza label do Materialize
 
               // Atualiza o mapa: centraliza e adiciona marcador
@@ -315,8 +589,8 @@ async function loadDriverPage(user) {
 
   // Botão para traçar rota
   document.getElementById('btn-route')?.addEventListener('click', () => {
-    const origin = document.getElementById('origin').value;
-    const destination = document.getElementById('destination').value;
+    const origin = originInput?.value;
+    const destination = destinationInput?.value;
     if (!origin || !destination) {
       alert('⚠️ Preencha origem e destino.');
       return;
@@ -337,11 +611,11 @@ async function loadDriverPage(user) {
 
   // Botão para salvar carona
   document.getElementById('btn-save')?.addEventListener('click', async () => {
-    const school = document.getElementById('school').value;
+    const school = schoolInput?.value;
     const seats = parseInt(document.getElementById('seats').value);
-    const origin = document.getElementById('origin').value;
-    const destination = document.getElementById('destination').value;
-    const time = document.getElementById('time').value;
+    const origin = originInput?.value;
+    const destination = destinationInput?.value;
+    const time = timeInput?.value;
 
     if (!school || !seats || !origin || !destination || !time) {
       alert('⚠️ Preencha todos os campos.');

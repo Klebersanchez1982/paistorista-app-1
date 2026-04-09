@@ -9,9 +9,10 @@
   <link href="style.css" rel="stylesheet"/>
 </head>
 <body class="page-driver grey lighten-4">
+  <a class="skip-link" href="#main-content">Pular para o conteudo principal</a>
 
   <!-- Loading Spinner -->
-  <div id="loading" class="center-align loading-overlay">
+  <div id="loading" class="center-align loading-overlay" role="status" aria-live="polite" aria-label="Carregando conteudo da pagina">
     <div class="preloader-wrapper big active">
       <div class="spinner-layer spinner-blue-only">
         <div class="circle-clipper left"><div class="circle"></div></div>
@@ -22,16 +23,16 @@
     <p>Carregando...</p>
   </div>
 
-  <nav class="blue darken-2 app-nav">
+  <nav class="blue darken-2 app-nav" aria-label="Navegacao principal do motorista">
     <div class="nav-wrapper container">
       <a href="#!" class="brand-logo"><i class="material-icons left">directions_car</i> Paistorista</a>
       <ul class="right">
-        <li><button id="btn-logout" class="btn red lighten-1 waves-effect btn-logout"><i class="material-icons left">exit_to_app</i> Sair</button></li>
+        <li><button id="btn-logout" type="button" class="btn red lighten-1 waves-effect btn-logout"><i class="material-icons left" aria-hidden="true">exit_to_app</i> Sair</button></li>
       </ul>
     </div>
   </nav>
 
-  <main class="container section app-shell driver-shell" style="display: none;">
+  <main id="main-content" class="container section app-shell driver-shell" style="display: none;" tabindex="-1">
     <section class="hero-strip hero-driver">
       <div>
         <p class="hero-kicker">PAINEL DO MOTORISTA</p>
@@ -47,24 +48,31 @@
     <section id="driver-create" class="panel-card panel-create">
       <h5 class="blue-text text-darken-2 section-title">Criar Nova Carona</h5>
       <div class="row">
-        <div class="input-field col s12 m6"><input id="school" type="text"><label for="school">Nome da Escola</label></div>
+        <div class="input-field col s12 m6"><input id="school" type="text" list="school-suggestions" autocomplete="off"><label for="school">Nome da Escola</label></div>
         <div class="input-field col s12 m6"><input id="seats" type="number"><label for="seats">Vagas disponíveis</label></div>
       </div>
       <div class="row">
         <div class="input-field col s12 m6"><input id="origin" type="text"><label for="origin">Endereço de origem</label></div>
-        <div class="input-field col s12 m6"><input id="destination" type="text"><label for="destination">Endereço de destino</label></div>
+        <div class="input-field col s12 m6"><input id="destination" type="text" list="destination-suggestions" autocomplete="off"><label for="destination">Endereço de destino</label></div>
       </div>
+      <datalist id="school-suggestions"></datalist>
+      <datalist id="destination-suggestions"></datalist>
+      <p id="school-info" class="input-hint" aria-live="polite">Digite o nome da escola para receber sugestoes automaticas. Voce tambem pode clicar no mapa para definir o destino.</p>
       <div class="row">
         <div class="input-field col s12 m6"><input id="time" type="time"><label for="time">Horário da carona</label></div>
       </div>
       <div class="row actions-row">
-        <button id="btn-location" class="btn teal waves-effect">Usar localização atual</button>
-        <button id="btn-route" class="btn blue waves-effect">Traçar rota</button>
-        <button id="btn-save" class="btn green waves-effect">Salvar carona</button>
+        <button id="btn-location" type="button" class="btn teal waves-effect">Usar localização atual</button>
+        <button id="btn-route" type="button" class="btn blue waves-effect">Traçar rota</button>
+        <button id="btn-save" type="button" class="btn green waves-effect">Salvar carona</button>
       </div>
     </section>
 
-    <section id="driver-map" class="card map-card panel-map"><div id="map"></div></section>
+    <section id="driver-map" class="card map-card panel-map" aria-labelledby="driver-map-title" aria-describedby="driver-map-desc">
+      <h5 id="driver-map-title" class="sr-only">Mapa da rota</h5>
+      <p id="driver-map-desc" class="map-help">O mapa exibe a rota entre origem e destino. Se o mapa nao carregar, voce ainda pode criar a carona preenchendo os campos de endereco e horario.</p>
+      <div id="map" role="img" aria-label="Mapa da rota entre origem e destino"></div>
+    </section>
 
     <section id="driver-rides" class="panel-card panel-rides">
       <h5 class="blue-text text-darken-2 section-title">Minhas Caronas</h5>

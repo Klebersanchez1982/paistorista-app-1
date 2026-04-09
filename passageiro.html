@@ -11,9 +11,10 @@
   <link href="style.css" rel="stylesheet"/>
 </head>
 <body class="page-passenger grey lighten-4">
+  <a class="skip-link" href="#main-content">Pular para o conteudo principal</a>
 
   <!-- Loading Spinner -->
-  <div id="loading" class="center-align loading-overlay">
+  <div id="loading" class="center-align loading-overlay" role="status" aria-live="polite" aria-label="Carregando conteudo da pagina">
     <div class="preloader-wrapper big active">
       <div class="spinner-layer spinner-blue-only">
         <div class="circle-clipper left"><div class="circle"></div></div>
@@ -25,20 +26,20 @@
   </div>
 
   <!-- Navbar -->
-  <nav class="blue darken-2 app-nav">
+  <nav class="blue darken-2 app-nav" aria-label="Navegacao principal do passageiro">
     <div class="nav-wrapper container">
       <a class="brand-logo"><i class="material-icons left">group</i> Paistorista - Passageiro</a>
       <ul class="right">
         <li>
-          <button id="btn-logout" class="btn red lighten-1 logout-btn">
-            <i class="material-icons left">exit_to_app</i> Sair
+          <button id="btn-logout" type="button" class="btn red lighten-1 logout-btn">
+            <i class="material-icons left" aria-hidden="true">exit_to_app</i> Sair
           </button>
         </li>
       </ul>
     </div>
   </nav>
 
-  <main class="container section app-shell passenger-shell" style="display: none;">
+  <main id="main-content" class="container section app-shell passenger-shell" style="display: none;" tabindex="-1">
     <section class="hero-strip hero-passenger">
       <div>
         <p class="hero-kicker">PAINEL DO PASSAGEIRO</p>
@@ -54,6 +55,10 @@
     <!-- Escolas cadastradas -->
     <section id="passenger-schools" class="panel-card panel-schools">
       <h5 class="blue-text text-darken-2 section-title">🏫 Escolas com caronas</h5>
+      <div class="input-field school-search-field">
+        <input id="school-search" type="text" autocomplete="off" aria-label="Buscar escola por nome">
+        <label for="school-search">Buscar escola por nome</label>
+      </div>
       <ul id="school-list" class="collection with-header smooth-collection">
         <li class="collection-header"><h6>Lista de Escolas</h6></li>
       </ul>
