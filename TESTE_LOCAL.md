@@ -29,6 +29,14 @@ A raiz do projeto deve conter arquivos como:
 
 O arquivo `firebase-config.js` inicializa Firebase Auth e Firestore.
 
+Para evitar o erro `Missing or insufficient permissions` ao salvar caronas, aplique as regras de Firestore do arquivo `firestore.rules` no console do Firebase.
+
+Fluxo esperado pelas regras:
+
+- `usuarios`: cada usuário grava e lê apenas o próprio perfil.
+- `caronas`: motorista autenticado pode criar e alterar apenas suas próprias caronas.
+- `solicitacoes`: usuário autenticado pode criar e atualizar solicitações.
+
 Para login funcionar no ambiente local, confirme no console do Firebase:
 
 1. `Authentication` > `Settings` > `Authorized domains`
@@ -90,7 +98,7 @@ Nao use `file:///...` para testar.
 6. Em `passageiro.html`:
    - listar escolas/caronas
    - solicitar carona
-7. Confirmar que o rodape de versao `v2.0.0` aparece nas paginas.
+7. Confirmar que o rodape de versao `v2.0.1` aparece nas paginas.
 
 ## 6. Problemas comuns
 

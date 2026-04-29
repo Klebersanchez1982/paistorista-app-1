@@ -47,7 +47,7 @@ Abrir no navegador:
    - selecionar escola
    - visualizar caronas
    - solicitar carona
-8. Confirmar rodape com versao `v2.0.0` nas paginas.
+8. Confirmar rodape com versao `v2.0.1` nas paginas.
 
 ## 4) Erros comuns e acao rapida
 
@@ -60,6 +60,9 @@ Abrir no navegador:
 
 - Login Google falha:
   - dominio nao autorizado no Firebase
+
+- Erro ao salvar carona com "Missing or insufficient permissions":
+  - publicar as regras do arquivo `firestore.rules` no Firestore Rules do Firebase Console
 
 ## 5) Encerrar teste
 

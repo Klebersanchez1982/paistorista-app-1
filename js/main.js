@@ -5,8 +5,35 @@ import { getEnvironmentName, getMapsApiKey } from './app-config.js';
 // Importações do Firebase
 const auth = firebase.auth();
 const db = firebase.firestore();
-let refreshTimerStarted = false;
 let mapsScriptPromise = null;
+
+function notify(message, type = 'info') {
+  if (window.M && typeof M.toast === 'function') {
+    M.toast({ html: message, classes: type });
+    return;
+  }
+
+  alert(message);
+}
+
+function firebaseErrorMessage(error, actionLabel = 'executar a operacao') {
+  const code = error?.code || '';
+  const fallback = error?.message || String(error || 'Erro desconhecido');
+  const map = {
+    'permission-denied': 'Sem permissao para ' + actionLabel + '. Verifique as regras do Firestore.',
+    'failed-precondition': 'Precondicao nao atendida para ' + actionLabel + '.',
+    'unavailable': 'Servico temporariamente indisponivel. Tente novamente em instantes.',
+    'unauthenticated': 'Sua sessao expirou. Faca login novamente.',
+    'not-found': 'Registro nao encontrado para concluir ' + actionLabel + '.'
+  };
+
+  return map[code] || fallback;
+}
+
+function notifyError(actionLabel, error) {
+  const detail = firebaseErrorMessage(error, actionLabel);
+  notify('⚠️ Nao foi possivel ' + actionLabel + '. ' + detail, 'red');
+}
 
 // Função de logout (comum)
 export async function logoutUser() {
@@ -15,7 +42,7 @@ export async function logoutUser() {
     window.location.href = 'login.html';
   } catch (error) {
     console.error('Erro ao fazer logout:', error);
-    alert('⚠️ Erro ao sair: ' + error.message);
+    notifyError('sair', error);
   }
 }
 
@@ -141,17 +168,9 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (window.location.pathname.endsWith('app.html')) {
         await loadDriverPage(user);
       }
-
-      // Atualiza a página periodicamente (evita múltiplos timers)
-      if (!refreshTimerStarted) {
-        refreshTimerStarted = true;
-        setInterval(() => {
-          location.reload();
-        }, 500000);
-      }
     } catch (error) {
       console.error('Erro ao inicializar página:', error);
-      alert('⚠️ Erro ao carregar a tela. Recarregue a página.\n\nDetalhe: ' + (error?.message || error));
+      notifyError('carregar a tela', error);
     } finally {
       showLoading(false);  // Esconde loading mesmo em caso de erro
     }
@@ -283,10 +302,25 @@ async function loadPassengerPage(user) {
   window.requestRide = async function(rideId) {
     try {
       const rideDoc = await db.collection('caronas').doc(rideId).get();
-      if (!rideDoc.exists) throw "Carona não existe";
+      if (!rideDoc.exists) throw new Error('Carona nao existe');
       const rideData = rideDoc.data();
 
-      if (rideData.vagas <= 0) throw "Sem vagas disponíveis";
+      if (rideData.vagas <= 0) throw new Error('Sem vagas disponiveis');
+
+      const previousRequests = await db.collection('solicitacoes')
+        .where('rideId', '==', rideId)
+        .where('passageiroId', '==', user.uid)
+        .get();
+
+      const hasActiveRequest = previousRequests.docs.some((doc) => {
+        const status = doc.data()?.status;
+        return status === 'pendente' || status === 'aceita';
+      });
+
+      if (hasActiveRequest) {
+        notify('Voce ja possui uma solicitacao ativa para esta carona.', 'orange');
+        return;
+      }
 
       // Adiciona solicitação
       await db.collection('solicitacoes').add({
@@ -300,7 +334,7 @@ async function loadPassengerPage(user) {
         timestamp: firebase.firestore.FieldValue.serverTimestamp()
       });
 
-      alert('✅ Solicitação enviada! Aguarde a resposta do motorista.');
+      notify('✅ Solicitacao enviada! Aguarde a resposta do motorista.', 'green');
 
       // Inicia timer para cancelamento automático (lógica no lado do servidor seria melhor, mas simulando aqui)
       setTimeout(async () => {
@@ -309,12 +343,12 @@ async function loadPassengerPage(user) {
           const reqDoc = reqSnap.docs[0];
           if (reqDoc.data().status === 'pendente') {
             await reqDoc.ref.update({ status: 'cancelada' });
-            alert('⚠️ Solicitação cancelada por falta de resposta.');
+            notify('⚠️ Solicitacao cancelada por falta de resposta.', 'orange');
           }
         }
       }, REQUEST_TIMEOUT);
     } catch (error) {
-      alert('⚠️ Erro ao solicitar: ' + error.message || error);
+      notifyError('solicitar carona', error);
     }
   };
 
@@ -573,17 +607,17 @@ async function loadDriverPage(user) {
                 title: 'Localização Atual'
               });
             } else {
-              alert('⚠️ Nenhum resultado encontrado.');
+              notify('⚠️ Nenhum resultado encontrado.', 'orange');
             }
           } else {
-            alert('⚠️ Erro no geocoding: ' + status);
+            notify('⚠️ Erro no geocoding: ' + status, 'red');
           }
         });
       }, error => {
-        alert('⚠️ Erro ao obter localização: ' + error.message);
+        notifyError('obter localizacao', error);
       });
     } else {
-      alert('⚠️ Geolocalização não suportada.');
+      notify('⚠️ Geolocalizacao nao suportada neste dispositivo.', 'red');
     }
   });
 
@@ -592,7 +626,7 @@ async function loadDriverPage(user) {
     const origin = originInput?.value;
     const destination = destinationInput?.value;
     if (!origin || !destination) {
-      alert('⚠️ Preencha origem e destino.');
+      notify('⚠️ Preencha origem e destino.', 'orange');
       return;
     }
 
@@ -604,21 +638,21 @@ async function loadDriverPage(user) {
       if (status === 'OK') {
         directionsRenderer.setDirections(response);
       } else {
-        alert('⚠️ Erro ao traçar rota: ' + status);
+        notify('⚠️ Erro ao tracar rota: ' + status, 'red');
       }
     });
   });
 
   // Botão para salvar carona
   document.getElementById('btn-save')?.addEventListener('click', async () => {
-    const school = schoolInput?.value;
-    const seats = parseInt(document.getElementById('seats').value);
-    const origin = originInput?.value;
-    const destination = destinationInput?.value;
-    const time = timeInput?.value;
+    const school = schoolInput?.value?.trim();
+    const seats = Number.parseInt(document.getElementById('seats').value, 10);
+    const origin = originInput?.value?.trim();
+    const destination = destinationInput?.value?.trim();
+    const time = timeInput?.value?.trim();
 
-    if (!school || !seats || !origin || !destination || !time) {
-      alert('⚠️ Preencha todos os campos.');
+    if (!school || !origin || !destination || !time || !Number.isInteger(seats) || seats <= 0) {
+      notify('⚠️ Preencha todos os campos e informe vagas validas.', 'orange');
       return;
     }
 
@@ -636,7 +670,7 @@ async function loadDriverPage(user) {
         status: 'ativa',
         solicitacoes: []
       });
-      alert('✅ Carona salva com sucesso!');
+      notify('✅ Carona salva com sucesso!', 'green');
       // Limpa formulário
       document.getElementById('school').value = '';
       document.getElementById('seats').value = '';
@@ -645,7 +679,7 @@ async function loadDriverPage(user) {
       document.getElementById('time').value = '';
       M.updateTextFields();
     } catch (error) {
-      alert('⚠️ Erro ao salvar: ' + error.message);
+      notifyError('salvar carona', error);
     }
   });
 
@@ -684,6 +718,7 @@ async function loadDriverPage(user) {
         pendingRequests.appendChild(li);
 
         // Verifica timeout
+        if (!req.timestamp || typeof req.timestamp.toMillis !== 'function') return;
         const timestamp = req.timestamp.toMillis();
         const elapsed = Date.now() - timestamp;
         if (elapsed > REQUEST_TIMEOUT) {
@@ -700,27 +735,36 @@ window.acceptRequest = async function(reqId, rideId) {
     const rideRef = db.collection('caronas').doc(rideId);
 
     await db.runTransaction(async (transaction) => {
-      const rideDoc = await transaction.get(rideRef);
-      if (!rideDoc.exists) throw "Carona não existe";
-      const newVagas = rideDoc.data().vagas - 1;
-      if (newVagas < 0) throw "Sem vagas disponíveis";
+      const reqDoc = await transaction.get(reqRef);
+      if (!reqDoc.exists) throw new Error('Solicitacao nao existe');
+      if (reqDoc.data().status !== 'pendente') throw new Error('Solicitacao ja foi processada');
 
-      transaction.update(rideRef, { vagas: newVagas });
+      const rideDoc = await transaction.get(rideRef);
+      if (!rideDoc.exists) throw new Error('Carona nao existe');
+      const rideData = rideDoc.data();
+      const newVagas = Number(rideData.vagas || 0) - 1;
+      const newVagasDisponiveis = Number(rideData.vagasDisponiveis || rideData.vagas || 0) - 1;
+      if (newVagas < 0 || newVagasDisponiveis < 0) throw new Error('Sem vagas disponiveis');
+
+      transaction.update(rideRef, {
+        vagas: newVagas,
+        vagasDisponiveis: newVagasDisponiveis
+      });
       transaction.update(reqRef, { status: 'aceita' });
     });
 
-    alert('✅ Solicitação aceita!');
+    notify('✅ Solicitacao aceita!', 'green');
   } catch (error) {
-    alert('⚠️ Erro ao aceitar: ' + error.message || error);
+    notifyError('aceitar solicitacao', error);
   }
 };
 
 window.rejectRequest = async function(reqId) {
   try {
     await db.collection('solicitacoes').doc(reqId).update({ status: 'recusada' });
-    alert('✅ Solicitação recusada.');
+    notify('✅ Solicitacao recusada.', 'green');
   } catch (error) {
-    alert('⚠️ Erro ao recusar: ' + error.message);
+    notifyError('recusar solicitacao', error);
   }
 };
 

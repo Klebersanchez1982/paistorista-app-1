@@ -1,0 +1,164 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isString(value) {
+      return value is string;
+    }
+
+    function isNonEmptyString(value, max) {
+      return isString(value) && value.size() > 0 && value.size() <= max;
+    }
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function validUserType(tipo) {
+      return tipo in ['motorista', 'passageiro'];
+    }
+
+    function validRideStatus(status) {
+      return status in ['ativa', 'inativa'];
+    }
+
+    function validRequestStatus(status) {
+      return status in ['pendente', 'aceita', 'recusada', 'cancelada'];
+    }
+
+    function getRide(rideId) {
+      return get(/databases/$(database)/documents/caronas/$(rideId));
+    }
+
+    function isRideOwnerById(rideId) {
+      return signedIn() && getRide(rideId).exists() && getRide(rideId).data.uid == request.auth.uid;
+    }
+
+    function validUsuarioWrite() {
+      return request.resource.data.keys().hasOnly(['nome', 'email', 'tipo'])
+        && isNonEmptyString(request.resource.data.nome, 120)
+        && isString(request.resource.data.email)
+        && request.resource.data.email == request.auth.token.email
+        && validUserType(request.resource.data.tipo);
+    }
+
+    function validCaronaCreate() {
+      return request.resource.data.keys().hasOnly([
+        'escola',
+        'motorista',
+        'uid',
+        'vagas',
+        'vagasDisponiveis',
+        'origem',
+        'destino',
+        'horario',
+        'dataCriacao',
+        'status',
+        'solicitacoes'
+      ])
+      && request.resource.data.uid == request.auth.uid
+      && isNonEmptyString(request.resource.data.escola, 120)
+      && isNonEmptyString(request.resource.data.motorista, 120)
+      && isNonEmptyString(request.resource.data.origem, 240)
+      && isNonEmptyString(request.resource.data.destino, 240)
+      && isNonEmptyString(request.resource.data.horario, 20)
+      && request.resource.data.vagas is int
+      && request.resource.data.vagas > 0
+      && request.resource.data.vagasDisponiveis is int
+      && request.resource.data.vagasDisponiveis >= 0
+      && request.resource.data.vagasDisponiveis <= request.resource.data.vagas
+      && request.resource.data.dataCriacao is timestamp
+      && validRideStatus(request.resource.data.status)
+      && request.resource.data.solicitacoes is list;
+    }
+
+    function validCaronaUpdate() {
+      return request.resource.data.uid == resource.data.uid
+        && request.resource.data.dataCriacao == resource.data.dataCriacao
+        && request.resource.data.vagas is int
+        && request.resource.data.vagas > 0
+        && request.resource.data.vagasDisponiveis is int
+        && request.resource.data.vagasDisponiveis >= 0
+        && request.resource.data.vagasDisponiveis <= request.resource.data.vagas
+        && validRideStatus(request.resource.data.status)
+        && isNonEmptyString(request.resource.data.escola, 120)
+        && isNonEmptyString(request.resource.data.motorista, 120)
+        && isNonEmptyString(request.resource.data.origem, 240)
+        && isNonEmptyString(request.resource.data.destino, 240)
+        && isNonEmptyString(request.resource.data.horario, 20)
+        && request.resource.data.solicitacoes is list;
+    }
+
+    function validSolicitacaoCreate() {
+      let ride = getRide(request.resource.data.rideId);
+      return request.resource.data.keys().hasOnly([
+        'passageiroId',
+        'passageiroNome',
+        'rideId',
+        'motoristaId',
+        'motoristaNome',
+        'horario',
+        'status',
+        'timestamp'
+      ])
+      && request.resource.data.passageiroId == request.auth.uid
+      && isNonEmptyString(request.resource.data.passageiroNome, 120)
+      && isString(request.resource.data.rideId)
+      && isString(request.resource.data.motoristaId)
+      && isString(request.resource.data.motoristaNome)
+      && isString(request.resource.data.horario)
+      && request.resource.data.timestamp is timestamp
+      && request.resource.data.status == 'pendente'
+      && ride.exists()
+      && ride.data.status == 'ativa'
+      && ride.data.vagas > 0
+      && request.resource.data.motoristaId == ride.data.uid;
+    }
+
+    function isRideParticipant() {
+      return signedIn() && (
+        resource.data.passageiroId == request.auth.uid ||
+        resource.data.motoristaId == request.auth.uid
+      );
+    }
+
+    function validSolicitacaoTransition() {
+      let oldStatus = resource.data.status;
+      let newStatus = request.resource.data.status;
+
+      return request.resource.data.diff(resource.data).changedKeys().hasOnly(['status'])
+        && validRequestStatus(newStatus)
+        && (
+          (oldStatus == 'pendente' && newStatus in ['aceita', 'recusada'] && request.auth.uid == resource.data.motoristaId)
+          || (oldStatus == 'pendente' && newStatus == 'cancelada' && request.auth.uid in [resource.data.passageiroId, resource.data.motoristaId])
+          || (oldStatus == newStatus)
+        );
+    }
+
+    match /usuarios/{userId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId) && validUsuarioWrite();
+    }
+
+    match /caronas/{caronaId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && validCaronaCreate();
+      allow update, delete: if signedIn()
+        && resource.data.uid == request.auth.uid
+        && validCaronaUpdate();
+    }
+
+    match /solicitacoes/{solicitacaoId} {
+      allow read: if isRideParticipant();
+      allow create: if signedIn()
+        && validSolicitacaoCreate();
+      allow update: if isRideParticipant()
+        && validSolicitacaoTransition();
+    }
+  }
+}
