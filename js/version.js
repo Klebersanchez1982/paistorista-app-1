@@ -1,5 +1,5 @@
 // Fonte unica da versao exibida no app.
-const APP_VERSION = "v2.0.1";
+const APP_VERSION = "v2.3.25";
 
 window.APP_VERSION = APP_VERSION;
 
